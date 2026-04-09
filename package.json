@@ -1,10 +1,10 @@
 {
   "name": "sbc-sip-sidecar",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "SBC SIP sidecar app (handles REGISTER and OPTIONS)",
   "main": "app.js",
   "engines": {
-    "node": ">= 18.0.0"
+    "node": ">= 20.0.0"
   },
   "keywords": [
     "sip",
@@ -12,6 +12,7 @@
   ],
   "scripts": {
     "start": "node app",
+    "cli": "node lib/cli/cli.js",
     "test": "NODE_ENV=test JAMBONES_HOSTING=1 HTTP_POOL=1 JWT_SECRET=foobarbazzle DRACHTIO_HOST=127.0.0.1 DRACHTIO_PORT=9022 DRACHTIO_SECRET=cymru JAMBONES_MYSQL_HOST=127.0.0.1 JAMBONES_MYSQL_PORT=3306 JAMBONES_MYSQL_USER=jambones_test JAMBONES_MYSQL_PASSWORD=jambones_test JAMBONES_MYSQL_DATABASE=jambones_test JAMBONES_REDIS_HOST=127.0.0.1 JAMBONES_REDIS_PORT=16379 JAMBONES_LOGLEVEL=debug ENABLE_METRICS=0 HTTP_PORT=3000 JAMBONES_SBCS=172.39.0.10 JAMBONES_FREESWITCH=127.0.0.1:8022:ClueCon:docker-host JAMBONES_TIME_SERIES_HOST=127.0.0.1 JAMBONES_NETWORK_CIDR=172.39.0.0/16 node test/ ",
     "coverage": "./node_modules/.bin/nyc --reporter html --report-dir ./coverage npm run test",
     "jslint": "eslint app.js lib"
@@ -28,23 +29,23 @@
   "homepage": "https://github.com/jambonz/sbc-sip-sidecar#readme",
   "dependencies": {
     "@babel/helpers": "^7.26.10",
-    "@jambonz/db-helpers": "^0.9.12",
+    "@jambonz/db-helpers": "^0.9.19",
     "@jambonz/digest-utils": "^0.0.6",
     "@jambonz/mw-registrar": "^0.2.7",
-    "@jambonz/realtimedb-helpers": "^0.8.13",
+    "@jambonz/realtimedb-helpers": "^0.8.19",
     "@jambonz/stats-collector": "^0.1.10",
     "@jambonz/time-series": "^0.2.8",
-    "debug": "^4.3.4",
+    "debug": "^4.4.3",
     "drachtio-mw-registration-parser": "^0.1.2",
     "drachtio-mw-response-time": "^1.0.2",
-    "drachtio-srf": "^5.0.5",
-    "pino": "^8.20.0",
+    "drachtio-srf": "^5.0.18",
+    "pino": "^10.1.0",
     "short-uuid": "^4.2.2"
   },
   "devDependencies": {
     "clear-module": "^4.1.2",
-    "eslint": "^7.32.0",
-    "eslint-plugin-promise": "^6.1.1",
+    "eslint": "^9.17.0",
+    "eslint-plugin-promise": "^7.2.1",
     "nyc": "^15.1.0",
     "tape": "^5.7.5"
   }

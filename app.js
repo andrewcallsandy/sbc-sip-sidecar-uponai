@@ -4,6 +4,11 @@ const {
   JAMBONES_MYSQL_USER,
   JAMBONES_MYSQL_PASSWORD,
   JAMBONES_MYSQL_DATABASE,
+  JAMBONES_MYSQL_WRITE_HOST,
+  JAMBONES_MYSQL_WRITE_USER,
+  JAMBONES_MYSQL_WRITE_PASSWORD,
+  JAMBONES_MYSQL_WRITE_DATABASE,
+  JAMBONES_MYSQL_WRITE_PORT,
   JAMBONES_REDIS_SENTINEL_MASTER_NAME,
   JAMBONES_REDIS_SENTINELS,
   JAMBONES_REDIS_HOST,
@@ -17,6 +22,7 @@ const {
   NODE_ENV,
   SBC_PUBLIC_ADDRESS_KEEP_ALIVE_IN_MILISECOND
 } = require('./lib/config');
+
 assert.ok(JAMBONES_MYSQL_HOST &&
   JAMBONES_MYSQL_USER &&
   JAMBONES_MYSQL_PASSWORD &&
@@ -32,6 +38,7 @@ assert.ok(DRACHTIO_PORT, 'missing DRACHTIO_PORT env var');
 assert.ok(DRACHTIO_SECRET, 'missing DRACHTIO_SECRET env var');
 assert.ok(JAMBONES_TIME_SERIES_HOST, 'missing JAMBONES_TIME_SERIES_HOST env var');
 
+const CIDRMatcher = require('cidr-matcher');
 const logger = require('pino')({ level: JAMBONES_LOGLEVEL || 'info' });
 const Srf = require('drachtio-srf');
 const srf = new Srf();
@@ -66,7 +73,15 @@ const {
   password: JAMBONES_MYSQL_PASSWORD,
   database: JAMBONES_MYSQL_DATABASE,
   connectionLimit: JAMBONES_MYSQL_CONNECTION_LIMIT || 10
-}, logger);
+}, logger, JAMBONES_MYSQL_WRITE_HOST && JAMBONES_MYSQL_WRITE_USER &&
+  JAMBONES_MYSQL_WRITE_PASSWORD && JAMBONES_MYSQL_WRITE_DATABASE ? {
+    host: JAMBONES_MYSQL_WRITE_HOST,
+    user: JAMBONES_MYSQL_WRITE_USER,
+    port: JAMBONES_MYSQL_WRITE_PORT || 3306,
+    password: JAMBONES_MYSQL_WRITE_PASSWORD,
+    database: JAMBONES_MYSQL_WRITE_DATABASE,
+    connectionLimit: JAMBONES_MYSQL_CONNECTION_LIMIT || 10
+  } : null);
 const {
   writeAlerts,
   AlertType
@@ -84,7 +99,9 @@ const {
   addToSet,
   removeFromSet,
   isMemberOfSet,
-  retrieveSet
+  retrieveSet,
+  createEphemeralGateway,
+  deleteEphemeralGateway
 } = require('@jambonz/realtimedb-helpers')({}, logger);
 
 const interval = SBC_PUBLIC_ADDRESS_KEEP_ALIVE_IN_MILISECOND || 900000; // Default 15 minutes
@@ -115,16 +132,34 @@ srf.locals = {
     addKey,
     addKeyNx,
     retrieveKey,
-    retrieveSet
+    retrieveSet,
+    createEphemeralGateway,
+    deleteEphemeralGateway
   },
   writeAlerts,
   AlertType
 };
+const cidrsEnv = process.env.JAMBONES_NETWORK_CIDR || '192.168.0.0/24,172.16.0.0/16,10.0.0.0/8';
+const cidrs = cidrsEnv
+  .split(',')
+  .map((s) => s.trim());
+const matcher = new CIDRMatcher(cidrs);
 
 srf.connect({ host: DRACHTIO_HOST, port: DRACHTIO_PORT, secret: DRACHTIO_SECRET });
-srf.on('connect', (err, hp) => {
+srf.on('connect', (err, hp, version, localHostports) => {
   if (err) return logger.error({ err }, 'Error connecting to drachtio server');
-  logger.info(`connected to drachtio listening on ${hp}`);
+  logger.info(`connected to drachtio listening on ${hp}, local hostports: ${localHostports}`);
+
+  if (localHostports) {
+    const locals = localHostports.split(',');
+    for (const hp of locals) {
+      const arr = /^(.*)\/(.*):(\d+)$/.exec(hp);
+      if (arr && 'tcp' === arr[1] && matcher.contains(arr[2])) {
+        const hostport = `${arr[2]}:${arr[3]}`;
+        srf.locals.privateSipAddress = hostport;
+      }
+    }
+  }
 
   // Add SBC Public IP to Database
   srf.locals.sbcPublicIpAddress = {};
@@ -239,6 +274,9 @@ srf.use('options', [
 
 srf.register(require('./lib/register')({logger}));
 srf.options(require('./lib/options')({srf, logger}));
+
+// Start CLI runtime config server with access to srf.locals
+require('./lib/cli/runtime-config').initialize(srf.locals, logger);
 
 setInterval(async() => {
   const count = await srf.locals.registrar.getCountOfUsers();
