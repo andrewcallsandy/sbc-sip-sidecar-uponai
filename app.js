@@ -237,8 +237,14 @@ srf.on('connect', (err, hp, version, localHostports) => {
     cleanSbcAddresses();
   }, interval);
 
-  /* start regbot */
-  require('./lib/sip-trunk-register')(logger, srf);
+  /* start regbot + optional BLF reconciler (off unless JAMBONES_BLF_ENABLED) */
+  const blf = require('./lib/blf-subscriptions');
+  srf.locals.blf = blf;
+  require('./lib/sip-trunk-register')(logger, srf)
+    .then((isActive) => {
+      if (isActive) blf.start(logger, srf);
+    })
+    .catch((err) => logger.error({err}, 'sip-trunk-register startup error'));
   // Start Options bot
   require('./lib/sip-trunk-options-ping')(logger, srf);
 });
@@ -274,6 +280,10 @@ srf.use('options', [
 
 srf.register(require('./lib/register')({logger}));
 srf.options(require('./lib/options')({srf, logger}));
+
+// BLF NOTIFY (out-of-dialog). Safe when disabled: only blf-* contacts are accepted.
+const createBlfNotifyHandler = require('./lib/blf-notify');
+srf.notify(createBlfNotifyHandler({logger, srf}));
 
 // Start CLI runtime config server with access to srf.locals
 require('./lib/cli/runtime-config').initialize(srf.locals, logger);
